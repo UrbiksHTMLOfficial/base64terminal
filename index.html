@@ -234,30 +234,41 @@
       { q: 'Will you come back?', a: 'yes' }
     ];
 
-    const tallFigure = `      |
-    
+    const tallFigure = `
+          ...
+         | o |
+          \ /     /\
+           |  /\ /  \
+          /|\/  \    \
+          / \  / \    \/
+           |  /   \/
+          /|\/
+          / \
+         | |
+          /|\
+          / \
+           |
+          /|\
+          / \
+           |
+          /|\
+          / \
+           |
+         /|\
+         / \
+        ...`;
 
-  IM DA FIGURE
-
-  
     const bunAscii = `    ~~~=====~~~
-   ⠀
-    THE BREAD
+   (  o_o  )
+    \ --- /
+     |||||`;
 
     const bigBunAscii = `          ___
-        @@@@@@
-      @@@@@@@@@@
-    @@@@@@@@@@@@@@
-   @@@@@      @@@@@
-  @@@@          @@@@
-  @@@   @@@@@@   @@@
-  @@@  @@@@@@@@  @@@
-  @@@  @@@  @@@  @@@
-  @@@@  @@@@@@  @@@@
-   @@@@@      @@@@@
-    @@@@@@@@@@@@@@
-      @@@@@@@@@@
-        @@@@@@`;
+        // _\\
+       ((  o_o  ))
+        \\ --- //
+         |||||||||
+         |||||||||`;
 
     function log(text, className = 'output', target = 'normal') {
       const targetTerminal = target === 'bun' ? bunTerminal : terminal;
@@ -455,4 +466,3 @@
   </script>
 </body>
 </html>
-
