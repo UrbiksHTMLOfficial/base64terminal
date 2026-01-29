@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Base64 Terminal</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: #000;
+      color: #0f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #terminal {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .line { margin: 2px 0; }
+    .prompt { color: #0f0; }
+    .output { color: #0f0; }
+    .error { color: #f00; }
+    #input-line {
+      display: flex;
+      padding: 8px 16px;
+      border-top: 1px solid #0f0;
+      gap: 8px;
+    }
+    #prompt-text { color: #0f0; }
+    #input {
+      flex: 1;
+      background: #000;
+      border: none;
+      color: #0f0;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      outline: none;
+    }
+
+    /* Bun Mode Styles */
+    #bun-desktop {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      z-index: 1000;
+    }
+
+    #bun-desktop.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    #bun-taskbar {
+      height: 50px;
+      background: rgba(0,0,0,0.3);
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      font-size: 12px;
+      color: white;
+    }
+
+    #bun-window {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    #bun-terminal-container {
+      width: 100%;
+      max-width: 800px;
+      height: 100%;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #bun-terminal-header {
+      height: 35px;
+      background: linear-gradient(to right, #667eea, #764ba2);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+      gap: 8px;
+    }
+
+    #bun-terminal {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      font-size: 13px;
+      font-family: 'Courier New', monospace;
+      background: #1e1e1e;
+      color: #0f0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    #bun-input-line {
+      display: flex;
+      padding: 8px 12px;
+      border-top: 1px solid #333;
+      gap: 6px;
+      background: #1e1e1e;
+    }
+
+    #bun-input {
+      flex: 1;
+      background: #1e1e1e;
+      border: none;
+      color: #0f0;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+  <div id="input-line">
+    <span id="prompt-text">> </span>
+    <input id="input" type="text" autofocus />
+  </div>
+
+  <!-- Bun Desktop Environment -->
+  <div id="bun-desktop">
+    <div id="bun-taskbar">🥐 Булочка Desktop</div>
+    <div id="bun-window">
+      <div id="bun-terminal-container">
+        <div id="bun-terminal-header">Terminal</div>
+        <div id="bun-terminal"></div>
+        <div id="bun-input-line">
+          <span>> </span>
+          <input id="bun-input" type="text" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const terminal = document.getElementById('terminal');
+    const input = document.getElementById('input');
+    const bunDesktop = document.getElementById('bun-desktop');
+    const bunTerminal = document.getElementById('bun-terminal');
+    const bunInput = document.getElementById('bun-input');
+
+    let generations = [];
+    let yesInterval = null;
+    let quizMode = false;
+    let quizIndex = 0;
+    let currentMode = 'normal'; // 'normal' or 'bun'
+
+    const quizQuestions = [
+      { q: 'What lies between sweetness and spice?', a: 'yes' },
+      { q: 'Do you remember the taste?', a: 'yes' },
+      { q: 'Can you let it go?', a: 'no' },
+      { q: 'Will you come back?', a: 'yes' }
+    ];
+
+    const tallFigure = `      |
+      |
+     \\|/
+      O
+     /|\\
+      |
+     / \\`;
+
+    const bunAscii = `    ~~~=====~~~
+   (  o_o  )
+    \\ --- /
+     |||||`;
+
+    const bigBunAscii = `          ___
+        // _\\\\
+       ((  o_o  ))
+        \\\\ --- //
+         |||||||||
+         |||||||||`;
+
+    function log(text, className = 'output', target = 'normal') {
+      const targetTerminal = target === 'bun' ? bunTerminal : terminal;
+      const line = document.createElement('div');
+      line.className = `line ${className}`;
+      line.textContent = text;
+      targetTerminal.appendChild(line);
+      targetTerminal.scrollTop = targetTerminal.scrollHeight;
+    }
+
+    function clearTerminalContent(target = 'normal') {
+      const targetTerminal = target === 'bun' ? bunTerminal : terminal;
+      targetTerminal.innerHTML = '';
+    }
+
+    const words = ['neural', 'quantum', 'cipher', 'signal', 'vector', 'matrix', 'protocol', 'firewall', 'bandwidth', 'packet', 'router', 'gateway', 'tunnel', 'encrypt', 'decrypt', 'hash', 'stream', 'socket', 'daemon', 'kernel', 'thread', 'process', 'cache', 'buffer', 'stack', 'heap', 'array', 'pointer', 'reference', 'instance'];
+
+    function createBunSVG() {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="160" viewBox="0 0 200 160"><rect width="100%" height="100%" fill="#f5e6d3"/><ellipse cx="100" cy="90" rx="70" ry="50" fill="#d4a574"/><path d="M 50 70 Q 70 65 90 70 Q 100 75 110 70 Q 130 65 150 70" stroke="#a0522d" stroke-width="4" fill="none"/><path d="M 45 90 Q 70 85 100 90 Q 130 95 155 90" stroke="#8b4513" stroke-width="3" fill="none"/><path d="M 50 110 Q 75 105 100 110 Q 125 115 150 110" stroke="#a0522d" stroke-width="3" fill="none"/><ellipse cx="70" cy="70" rx="15" ry="10" fill="#e8c4a0" opacity="0.6"/></svg>`;
+      return btoa(svg);
+    }
+
+    function randomBase64(kind = 'mixed') {
+      let content = '';
+      if (kind === 'text' || kind === 'mixed') {
+        const numWords = Math.floor(Math.random() * 5) + 2;
+        const selectedWords = [];
+        for (let i = 0; i < numWords; i++) {
+          selectedWords.push(words[Math.floor(Math.random() * words.length)]);
+        }
+        content = selectedWords.join(' ');
+      }
+      if (kind === 'image' || (kind === 'mixed' && Math.random() < 0.3)) {
+        const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffffff', '#000000'];
+        const bg = colors[Math.floor(Math.random() * colors.length)];
+        const fg = colors[Math.floor(Math.random() * colors.length)];
+        const text = Math.random().toString(36).slice(2, 8).toUpperCase();
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect width="100%" height="100%" fill="${bg}"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-family="monospace" font-size="24" font-weight="bold">${text}</text></svg>`;
+        content = svg;
+      }
+      return btoa(content);
+    }
+
+    function startQuiz(target = 'normal') {
+      quizMode = true;
+      quizIndex = 0;
+      clearTerminalContent(target);
+      log(tallFigure, 'output', target);
+      setTimeout(() => {
+        clearTerminalContent(target);
+        log(bunAscii, 'output', target);
+        log('', 'output', target);
+        askQuestion(target);
+      }, 1500);
+    }
+
+    function askQuestion(target = 'normal') {
+      if (quizIndex >= quizQuestions.length) {
+        quizMode = false;
+        clearTerminalContent(target);
+        log('You... understood.', 'output', target);
+        setTimeout(() => {
+          log('Welcome to the bun realm.', 'output', target);
+        }, 1000);
+        return;
+      }
+      const question = quizQuestions[quizIndex];
+      log(question.q + ' (yes/no)', 'prompt', target);
+    }
+
+    function handleQuizAnswer(answer, target = 'normal') {
+      const question = quizQuestions[quizIndex];
+      if (answer.toLowerCase() === question.a) {
+        log('...', 'output', target);
+      } else {
+        quizMode = false;
+        clearTerminalContent(target);
+        log(bigBunAscii, 'output', target);
+        log('', 'output', target);
+        log('you have failed me... GOODBYE', 'error', target);
+        setTimeout(() => {
+          clearTerminalContent(target);
+          floodWithBase64(target);
+        }, 10000);
+        return;
+      }
+      quizIndex++;
+      setTimeout(() => {
+        askQuestion(target);
+      }, 800);
+    }
+
+    function floodWithBase64(target = 'normal') {
+      const strings = [];
+      for (let i = 0; i < 200; i++) {
+        strings.push(randomBase64('mixed'));
+      }
+      const specialPos = Math.floor(Math.random() * strings.length);
+      strings[specialPos] = btoa('YOU NEVER LIKED CINNAMON BUNS');
+
+      strings.forEach((b64, idx) => {
+        setTimeout(() => {
+          const className = idx === specialPos ? 'error' : 'output';
+          log(b64, className, target);
+        }, idx * 10);
+      });
+    }
+
+    function handleCommand(cmd, target = 'normal') {
+      const parts = cmd.trim().split(/\s+/);
+      const command = parts[0]?.toLowerCase();
+      const args = parts.slice(1).join(' ');
+
+      if (quizMode) {
+        handleQuizAnswer(cmd, target);
+        return;
+      }
+
+      log(`> ${cmd}`, 'prompt', target);
+
+      if (command === 'help') {
+        log('Available commands:', 'output', target);
+        log('  generate [N]  - output N random base64 strings (default: 1)', 'output', target);
+        log('  view          - display all generated base64 strings', 'output', target);
+        log('  yes [TEXT]    - repeat TEXT infinitely (press Ctrl+C to stop)', 'output', target);
+        log('  help          - show this help message', 'output', target);
+        log('  clear         - clear the terminal', 'output', target);
+      } else if (command === 'activate' && args === 'bun') {
+        currentMode = 'bun';
+        bunDesktop.classList.add('active');
+        bunInput.focus();
+        log('🥐 Булочка с Корицей hub activated', 'output', target);
+      } else if (command === 'deactivate' && args === 'bun') {
+        if (target === 'bun') {
+          startQuiz(target);
+        } else {
+          log('Can only deactivate from bun mode', 'error', target);
+        }
+      } else if (command === 'generate') {
+        const count = parseInt(args) || 1;
+        if (count < 1 || count > 1000) {
+          log('Count must be between 1 and 1000', 'error', target);
+          return;
+        }
+        for (let i = 0; i < count; i++) {
+          const base64 = randomBase64('mixed');
+          generations.push(base64);
+          log(base64, 'output', target);
+        }
+      } else if (command === 'yes') {
+        if (yesInterval) {
+          log('yes already running. Stop it first with Ctrl+C', 'error', target);
+          return;
+        }
+        const text = args || 'y';
+        let count = 0;
+        yesInterval = setInterval(() => {
+          log(text, 'output', target);
+          count++;
+          if (count > 10000) {
+            clearInterval(yesInterval);
+            yesInterval = null;
+            log('yes stopped (limit reached)', 'error', target);
+          }
+        }, 10);
+      } else if (command === 'view') {
+        if (generations.length === 0) {
+          log('No generations yet.', 'error', target);
+        } else {
+          log(`Generated ${generations.length} string(s):`, 'output', target);
+          generations.forEach((b64, idx) => {
+            log(`[${idx + 1}] ${b64.substring(0, 60)}${b64.length > 60 ? '...' : ''}`, 'output', target);
+          });
+        }
+      } else if (command === 'clear') {
+        clearTerminalContent(target);
+        if (yesInterval) {
+          clearInterval(yesInterval);
+          yesInterval = null;
+        }
+      } else if (command === '') {
+        // empty command
+      } else {
+        log(`Command not found: ${command}`, 'error', target);
+      }
+    }
+
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const cmd = input.value;
+        input.value = '';
+        handleCommand(cmd, 'normal');
+      }
+      if (e.key === 'c' && e.ctrlKey) {
+        e.preventDefault();
+        if (yesInterval) {
+          clearInterval(yesInterval);
+          yesInterval = null;
+          log('^C', 'prompt', 'normal');
+        }
+      }
+    });
+
+    bunInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const cmd = bunInput.value;
+        bunInput.value = '';
+        handleCommand(cmd, 'bun');
+        if (cmd.toLowerCase().trim() === 'deactivate bun') {
+          setTimeout(() => {
+            // After quiz completes successfully
+            const checkQuizDone = setInterval(() => {
+              if (!quizMode) {
+                bunDesktop.classList.remove('active');
+                input.focus();
+                currentMode = 'normal';
+                clearInterval(checkQuizDone);
+              }
+            }, 500);
+          }, 1000);
+        }
+      }
+      if (e.key === 'c' && e.ctrlKey) {
+        e.preventDefault();
+        if (yesInterval) {
+          clearInterval(yesInterval);
+          yesInterval = null;
+          log('^C', 'prompt', 'bun');
+        }
+      }
+    });
+
+    log('Base64 Terminal v1.0', 'output', 'normal');
+    log('Type "help" for available commands.', 'output', 'normal');
+  </script>
+</body>
+</html>
